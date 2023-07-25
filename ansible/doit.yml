@@ -1,0 +1,38 @@
+---
+- name: Install msr-tools package and configure MSR module
+  become: yes
+# // test mode
+# - hosts: targets
+# [ https://stackoverflow.com/questions/33222641/override-hosts-variable-of-ansible-playbook-from-the-command-line ]
+# // nb: unset 'targets' variable with a 'vars_prompt' stanza shall always ask for the variable value
+  hosts: "{{ targets | default('all') }}"
+  # [ https://docs.ansible.com/ansible/latest/playbook_guide/playbooks_prompts.html#playbooks-prompts ]
+  vars_prompt:
+    # nb: a "-e 'targets=group_name'" would skip this
+    - name: targets
+      prompt: "enter the target group (default = 'all', use -e targets=.. to override)"
+      default: all
+      private: false
+      confirm: true
+
+  # don't waste too much time on this
+  gather_facts: no
+
+  tasks:
+    - name: Install msr-tools package
+      apt:
+        name: msr-tools
+        state: present
+
+    - name: Load msr module
+      modprobe:
+        name: msr
+        state: present
+
+      # [ https://github.com/torvalds/linux/blob/0b5547c51827e053cc754db47d3ec3e6c2c451d2/arch/x86/include/asm/msr-index.h#L545C27-L545C37 ]
+    - name: Read the current value of register 0xc0011029
+      command: rdmsr -c 0xc0011029
+      register: msr_output
+
+    - name: Set the value of register 0xc0011029 to add bit  1 << 9
+      shell: wrmsr -a 0xc0011029 $(( {{ msr_output.stdout }} | 512 ))
